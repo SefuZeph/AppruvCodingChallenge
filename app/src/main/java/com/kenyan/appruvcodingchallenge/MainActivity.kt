@@ -3,6 +3,7 @@ package com.kenyan.appruvcodingchallenge
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Matrix
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.util.Size
@@ -14,15 +15,26 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.kenyan.appruvcodingchallenge.network.NetworkClient
+import com.kenyan.appruvcodingchallenge.network.UploadService
 import kotlinx.android.synthetic.main.activity_main.*
+import okhttp3.MediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
+import okhttp3.ResponseBody
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+import retrofit2.Retrofit
 import java.io.File
 import java.util.concurrent.Executors
+
 
 //Keep track of camera permission
 private const val REQUEST_CODE_PERMISSIONS = 10
 
 // This is an array of all the permission specified in the manifest.
-private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA)
+private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA, Manifest.permission.INTERNET)
 
 class MainActivity : AppCompatActivity() {
     private val executor = Executors.newSingleThreadExecutor()
@@ -97,6 +109,9 @@ class MainActivity : AppCompatActivity() {
                         val msg = "Photo capture succeeded: ${file.absolutePath}"
                         Log.d("CameraXApp", msg)
                         viewFinder.post {
+                            uploadImage(msg)
+                            val uriSavedImage: Uri =
+                                Uri.fromFile(File(msg))
                             Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -147,5 +162,31 @@ class MainActivity : AppCompatActivity() {
         ContextCompat.checkSelfPermission(
             baseContext, it
         ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    fun uploadImage(filePath: String) {
+        val networkClient = NetworkClient()
+        val retrofit: Retrofit = networkClient.getRetrofitClient(this)!!
+        val upload: UploadService = retrofit.create(UploadService::class.java)
+
+        val file = File(filePath)
+        val fileReqBody = RequestBody.create(MediaType.parse("image/*"), file)
+        val part =
+            MultipartBody.Part.createFormData("upload", "", fileReqBody)
+
+        // user random id
+        val userIds = (0..10).random()
+        val call = upload.uploadImage(part, userIds)
+        call.enqueue(object : Callback<ResponseBody> {
+            override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                Toast.makeText(applicationContext, "${response.isSuccessful}", Toast.LENGTH_LONG)
+                    .show()
+            }
+
+            override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
+                Toast.makeText(applicationContext, "${t.message}", Toast.LENGTH_LONG)
+                    .show()
+            }
+        })
     }
 }
